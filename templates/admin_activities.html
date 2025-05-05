@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>FAJ2 - Gestion des activités</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+
+    <!-- Bouton retour -->
+    <div class="mb-6">
+        <a href="/admin" class="bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800">
+            ⬅ Retour à l'administration
+        </a>
+    </div>
+
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-xl shadow-md">
+        <h1 class="text-2xl font-bold mb-6 text-gray-800 text-center">Gestion des activités</h1>
+
+        <!-- Formulaire d'ajout -->
+        <form method="post" action="/admin/activities/add" class="flex gap-4 mb-8">
+            <input type="text" name="name" placeholder="Nom de l'activité" required
+                   class="flex-1 border border-gray-300 p-2 rounded-md">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+                Ajouter
+            </button>
+        </form>
+
+        <!-- Liste des activités -->
+        <h2 class="text-xl font-semibold mb-4">Activités existantes</h2>
+        <ul class="space-y-2">
+            {% for activity in activities %}
+            <li class="flex justify-between items-center bg-gray-50 p-3 rounded-md border">
+                <span>{{ activity.name }}</span>
+                <form method="get" action="/admin/activities/delete/{{ activity.id }}"
+                      onsubmit="return confirm('Supprimer cette activité ?')">
+                    <button type="submit" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm">
+                        Supprimer
+                    </button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+</body>
+</html>

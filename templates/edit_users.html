@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>FAJ2 - Modifier un utilisateur</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+
+    <div class="max-w-xl mx-auto bg-white p-6 rounded-xl shadow-md">
+        <h1 class="text-2xl font-bold mb-6 text-gray-800 text-center">Modifier l'utilisateur</h1>
+
+        <form method="post" action="/admin/users/edit/{{ user.id }}" class="space-y-4">
+            <div>
+                <label for="username" class="block text-sm font-medium text-gray-700">Identifiant</label>
+                <input type="text" name="username" id="username" value="{{ user.username }}" required
+                       class="mt-1 block w-full border border-gray-300 p-2 rounded-md">
+            </div>
+
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-700">Mot de passe</label>
+                <input type="password" name="password" id="password" value="{{ user.password }}" required
+                       class="mt-1 block w-full border border-gray-300 p-2 rounded-md">
+            </div>
+
+            <div>
+                <label for="role" class="block text-sm font-medium text-gray-700">Rôle</label>
+                <select name="role" id="role" class="mt-1 block w-full border border-gray-300 p-2 rounded-md">
+                    <option value="user" {% if user.role == "user" %}selected{% endif %}>Utilisateur</option>
+                    <option value="admin" {% if user.role == "admin" %}selected{% endif %}>Administrateur</option>
+                </select>
+            </div>
+
+            <div class="flex justify-between">
+                <a href="/admin/users" class="text-blue-600 hover:underline">⬅ Retour</a>
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                    Enregistrer les modifications
+                </button>
+            </div>
+        </form>
+    </div>
+
+</body>
+</html>

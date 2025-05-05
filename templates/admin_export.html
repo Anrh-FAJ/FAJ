@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Gestion des exports</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body class="bg-light text-dark">
+
+<div class="container py-5">
+    <a href="/admin" class="btn btn-dark mb-4">
+        <span class="me-2">⬅️</span>Retour à l'administration
+    </a>
+
+    <h2 class="text-center mb-5 fw-bold">Gestion des exports</h2>
+
+    <!-- Partie 1 -->
+    <div class="card shadow-sm mb-5">
+        <div class="card-body">
+            <h4 class="mb-4"><span class="me-2">📊</span>Récapitulatif mensuel</h4>
+            <form method="post" action="/admin/exports/monthly" class="row g-3 align-items-end">
+                <div class="col-auto">
+                    <label for="month" class="form-label">Mois :</label>
+                    <select name="month" id="month" class="form-select">
+                        {% for m in range(1, 13) %}
+                            <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ '%02d' % m }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label for="year" class="form-label">Année :</label>
+                    <select name="year" id="year" class="form-select">
+                        {% for y in range(2023, 2031) %}
+                            <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary mt-2">📥 Exporter</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Partie 2 -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h4 class="mb-4"><span class="me-2">👥</span>Récapitulatif mensuel par collaborateur</h4>
+            <form method="post" action="/admin/exports/users" class="row g-3 align-items-end">
+                <div class="col-auto">
+                    <label for="month_user" class="form-label">Mois :</label>
+                    <select name="month" id="month_user" class="form-select">
+                        {% for m in range(1, 13) %}
+                            <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ '%02d' % m }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label for="year_user" class="form-label">Année :</label>
+                    <select name="year" id="year_user" class="form-select">
+                        {% for y in range(2023, 2031) %}
+                            <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-success mt-2">📊 Générer le tableau</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+	{% if user_summary %}
+		<div class="table-responsive mt-4">
+			<h4 class="text-center mt-4">Tableau récapitulatif (collaborateurs vs activités)</h4>
+			<table class="table table-bordered table-striped text-center align-middle">
+				<thead class="table-light">
+					<tr>
+						<th>Utilisateur</th>
+						{% for activity in activities %}
+							<th>{{ activity }}</th>
+						{% endfor %}
+					</tr>
+				</thead>
+				<tbody>
+					{% for row in user_summary %}
+						<tr>
+							<td class="fw-bold">{{ row['Utilisateur'] }}</td>
+							{% for activity in activities %}
+								<td>{{ row.get(activity, "00:00") }}</td>
+							{% endfor %}
+						</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
+		            <form method="post" action="/admin/exports/users/excel" class="text-center mt-3">
+                <input type="hidden" name="month" value="{{ selected_month }}">
+                <input type="hidden" name="year" value="{{ selected_year }}">
+                <button type="submit" class="btn btn-success">📥 Exporter au format Excel</button>
+            </form>
+	{% endif %}
+</div>
+
+</body>
+</html>

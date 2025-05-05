@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Saisie des temps</title>
+	<p class="text-sm text-gray-600 mb-4">👤 Connecté en tant que : <strong>{{ user_name }}</strong></p>
+
+    <script>
+        function updateClock() {
+            const now = new Date();
+            document.getElementById("clock").textContent =
+                now.toLocaleTimeString("fr-FR", { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+        setInterval(updateClock, 1000);
+        window.onload = updateClock;
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+	<div class="p-4">
+	  <a href="/" class="bg-gray-700 hover:bg-gray-800 text-white font-semibold px-4 py-2 rounded">
+		🔓 Déconnexion
+	  </a>
+	</div>
+
+    <div class="max-w-4xl mx-auto p-6">
+        <h1 class="text-xl font-semibold mb-2">Saisie des temps</h1>
+
+        <div class="mb-4 flex items-center space-x-4 text-sm text-gray-600">
+            <span>📅 Date du jour : {{ today.strftime("%d/%m/%Y") }}</span>
+            <span>⏰ Heure : <span id="clock"></span></span>
+        </div>
+
+        {% if error %}
+            <div class="bg-red-100 text-red-700 px-4 py-2 rounded mb-4 border border-red-300">
+                {{ error }}
+            </div>
+        {% endif %}
+
+        <!-- Formulaire de saisie -->
+        <form method="post" action="/saisie/add" class="bg-white p-6 rounded-xl shadow-md space-y-4 mb-6">
+            <div class="flex flex-col md:flex-row md:items-center md:space-x-4">
+                <!-- Activité -->
+                <div class="w-full md:w-1/3">
+                    <label class="block font-semibold mb-1">Activité</label>
+                    <select name="activity_id" required class="w-full border rounded px-3 py-2">
+                        <option value="">-- Choisir une activité --</option>
+                        {% for act in activities %}
+                        <option value="{{ act.id }}">{{ act.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Heure de début -->
+                <div class="w-full md:w-1/3">
+                    <label class="block font-semibold mb-1">Heure de début</label>
+                    <input type="time" name="heure_debut" required class="w-full border rounded px-3 py-2" />
+                </div>
+
+                <!-- Heure de fin -->
+                <div class="w-full md:w-1/3">
+                    <label class="block font-semibold mb-1">Heure de fin</label>
+                    <input type="time" name="heure_fin" required class="w-full border rounded px-3 py-2" />
+                </div>
+            </div>
+
+            <div class="text-right">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded">
+                    ➕ Ajouter
+                </button>
+            </div>
+        </form>
+
+        <!-- Tableau des enregistrements -->
+        <div class="bg-white p-6 rounded-xl shadow-md mb-6">
+            <h2 class="text-lg font-bold mb-4">⏱️ Enregistrements du jour</h2>
+            <form action="/saisie/delete" method="post" id="deleteForm">
+                <table class="w-full text-sm border border-gray-300 rounded overflow-hidden">
+                    <thead class="bg-gray-200">
+                        <tr>
+                            <th class="p-2 text-center">✔️</th>
+                            <th class="p-2">Activité</th>
+                            <th class="p-2">Début</th>
+                            <th class="p-2">Fin</th>
+                            <th class="p-2">Durée</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in saisies %}
+                        <tr class="border-t hover:bg-gray-50">
+                            <td class="text-center"><input type="radio" name="saisie_id" value="{{ s.id }}"></td>
+                            <td class="p-2">{{ s.activity_name }}</td>
+                            <td class="p-2">{{ s.heure_debut }}</td>
+                            <td class="p-2">{{ s.heure_fin }}</td>
+                            <td class="p-2">{{ s.duree }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <div class="mt-4 text-right">
+                    <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">
+                        🗑 Supprimer la ligne sélectionnée
+                    </button>
+                </div>
+
+                <!-- Total global -->
+                <div class="mt-4 text-sm text-gray-700 flex items-center justify-end gap-2">
+                    🕒 Temps total :
+                    <span class="font-semibold">{{ total_duree }}</span>
+                </div>
+            </form>
+        </div>
+
+        <!-- Commentaire global -->
+        <div class="bg-white p-6 rounded-xl shadow-md">
+            <form action="/saisie/commentaire" method="post">
+                <label for="commentaire" class="block font-medium mb-2">📝 Commentaire global de la journée :</label>
+                <textarea name="commentaire" rows="3" class="w-full border rounded px-3 py-2">{{ commentaire_global }}</textarea>
+                <div class="mt-3 text-right">
+                    <button type="submit" class="bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900">
+                        💾 Enregistrer le commentaire
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

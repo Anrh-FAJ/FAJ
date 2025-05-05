@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Interrogation journée opérateur</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .content {
+            max-width: 800px;
+            margin: auto;
+            padding: 2rem;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h2 {
+            font-weight: bold;
+        }
+        .form-section {
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Bouton retour -->
+	<div class="m-3">
+		<a href="/admin" class="btn btn-dark">
+			<i class="bi bi-arrow-left-circle"></i> Retour à l'administration
+		</a>
+	</div>
+<div class="container mt-4 content">
+
+    <!-- Titre -->
+    <h2 class="text-center mb-4">📅 Interrogation journée opérateur</h2>
+
+    <!-- Formulaire -->
+    <form method="post" action="/admin/journee" class="form-section row g-3">
+
+        <!-- Date -->
+        <div class="col-md-2">
+            <label for="jour" class="form-label">Jour</label>
+            <select class="form-select" id="jour" name="jour">
+                {% for j in range(1, 32) %}
+                    <option value="{{ j }}" {% if j == selected_jour %}selected{% endif %}>{{ "%02d"|format(j) }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <label for="mois" class="form-label">Mois</label>
+            <select class="form-select" id="mois" name="mois">
+                {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {% if m == selected_mois %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <label for="annee" class="form-label">Année</label>
+            <select class="form-select" id="annee" name="annee">
+                {% for a in range(2023, 2031) %}
+                    <option value="{{ a }}" {% if a == selected_annee %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Utilisateur -->
+        <div class="col-md-4">
+            <label for="user_id" class="form-label">Opérateur</label>
+            <select class="form-select" id="user_id" name="user_id">
+                {% for u in utilisateurs %}
+                    <option value="{{ u[0] }}" {% if u[0] == selected_user_id %}selected{% endif %}>{{ u[1] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-2 align-self-end">
+            <button type="submit" class="btn btn-primary w-100">Afficher le tableau</button>
+        </div>
+    </form>
+
+    {% if enregistrements %}
+        <!-- Tableau des enregistrements -->
+        <h5 class="mt-4">⏱️ Enregistrements de la journée</h5>
+        <table class="table table-bordered table-striped">
+            <thead>
+                <tr>
+                    <th>Activité</th>
+                    <th>Heure de début</th>
+                    <th>Heure de fin</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for enregistrement in enregistrements %}
+                    <tr>
+                        <td>{{ enregistrement[0] }}</td>
+                        <td>{{ enregistrement[1] }}</td>
+                        <td>{{ enregistrement[2] }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Commentaire de la journée -->
+        <h5 class="mt-4">🗒️ Commentaire du jour</h5>
+        <div class="border p-3 bg-light rounded">
+            {{ commentaire or "Aucun commentaire saisi pour cette journée." }}
+        </div>
+    {% endif %}
+
+</div>
+
+<!-- Bootstrap Icons (pour flèche) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+</body>
+</html>
