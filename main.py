@@ -57,7 +57,16 @@ async def saisie_home(request: Request):
 async def admin_users(request: Request):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute("SELECT id, username, role FROM users")
+    cursor.execute("""
+        SELECT id, username, role FROM users
+        ORDER BY 
+            CASE role 
+                WHEN 'admin' THEN 0 
+                WHEN 'user' THEN 1 
+                ELSE 2 
+            END,
+            username ASC
+    """)
     users = cursor.fetchall()
     conn.close()
     return templates.TemplateResponse("admin_users.html", {"request": request, "users": users})
