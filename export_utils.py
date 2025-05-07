@@ -50,11 +50,13 @@ def get_user_activity_summary_dataframe(conn, year: int, month: int):
     query = """
         SELECT u.username AS Utilisateur,
                a.name AS Activité,
-               EXTRACT(EPOCH FROM (d.heure_fin - d.heure_debut)) / 60 AS Minutes
+               EXTRACT(EPOCH FROM (d.heure_fin::time - d.heure_debut::time)) / 60 AS Minutes
         FROM durees d
         JOIN users u ON d.user_id = u.id
         JOIN activities a ON d.activity_id = a.id
         WHERE d.date BETWEEN %s AND %s
+          AND d.heure_debut IS NOT NULL
+          AND d.heure_fin IS NOT NULL
     """
 
     df = pd.read_sql_query(query, conn, params=(date_debut, date_fin))
@@ -69,4 +71,5 @@ def get_user_activity_summary_dataframe(conn, year: int, month: int):
     pivot_df = pivot_df.reset_index()
 
     return pivot_df
+
 
