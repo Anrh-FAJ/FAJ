@@ -353,7 +353,7 @@ async def add_user(
     try:
         cursor.execute("INSERT INTO users (username, password, role) VALUES (%s, %s, %s)", (username, password, role))
         conn.commit()
-    except sqlite3.IntegrityError:
+    except psycopg2.IntegrityError:
         # Option : gérer les doublons ici si souhaité
         pass
 
@@ -515,7 +515,7 @@ async def get_admin_journee(request: Request):
 
 
 
-@@app.post("/admin/journee", response_class=HTMLResponse)
+@app.post("/admin/journee", response_class=HTMLResponse)
 async def admin_journee_post(
     request: Request,
     jour: int = Form(...),
