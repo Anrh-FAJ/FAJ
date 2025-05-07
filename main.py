@@ -5,17 +5,15 @@ from export_utils import get_monthly_summary_dataframe, export_to_excel
 import tempfile
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-import sqlite3
 import os
+import psycopg2
 from datetime import date
 from datetime import datetime
-from fastapi import Form
 import pandas as pd  # Nécessaire pour l'export
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi import Form
 import calendar
 from export_utils import get_user_activity_summary_dataframe, export_to_excel
-from datetime import date
 from fastapi.routing import APIRouter
 
 templates = Jinja2Templates(directory="templates")
@@ -28,21 +26,22 @@ app.add_middleware(SessionMiddleware, secret_key="faj2-secret-key")
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# 📍 Chemin de la base sur le serveur réseau
-DB_PATH = r"\\srv-file1\Bibliotheque\Etablissements\Paris_11_EA\BUREAUTI\FAJ - DB\FAJ2.db"
 
 # 🔌 Connexion à la BDD
 def get_db_connection():
-    conn = sqlite3.connect(r"\\srv-file1\Bibliotheque\Etablissements\Paris_11_EA\BUREAUTI\FAJ - DB\FAJ2.db")
-    conn.row_factory = sqlite3.Row
-    return conn
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        raise ValueError("DATABASE_URL environment variable is not set.")
+    
+    return psycopg2.connect(db_url, cursor_factory=psycopg2.extras.DictCursor)
+
 
 
 # 🟦 Page de connexion
 @app.get("/", response_class=HTMLResponse)
 async def login_page(request: Request):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute("SELECT username FROM users ORDER BY username")
     users = cursor.fetchall()
     conn.close()
@@ -57,7 +56,7 @@ async def saisie_home(request: Request):
 @app.get("/admin/users", response_class=HTMLResponse)
 async def admin_users(request: Request):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute("SELECT id, username, role FROM users")
     users = cursor.fetchall()
     conn.close()
@@ -66,8 +65,8 @@ async def admin_users(request: Request):
 
 def get_user_name(user_id: int):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT username FROM users WHERE id = ?", (user_id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
     user = cursor.fetchone()
     conn.close()
     return user["username"] if user else "Inconnu"
@@ -82,7 +81,8 @@ async def render_saisie_page(request: Request, error: str = None):
     today_str = today.isoformat()
 
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
 
     # ✅ Activités
     cursor.execute("SELECT id, name FROM activities ORDER BY name")
@@ -93,7 +93,7 @@ async def render_saisie_page(request: Request, error: str = None):
         SELECT d.id, a.name AS activity_name, d.heure_debut, d.heure_fin
         FROM durees d
         JOIN activities a ON d.activity_id = a.id
-        WHERE d.date = ? AND d.user_id = ?
+        WHERE d.date = %s AND d.user_id = %s
         ORDER BY d.heure_debut
     """, (today_str, user_id))
     rows = cursor.fetchall()
@@ -123,7 +123,7 @@ async def render_saisie_page(request: Request, error: str = None):
     # ✅ Commentaire global (si existe)
     cursor.execute("""
         SELECT texte FROM commentaire_journalier
-        WHERE user_id = ? AND date = ?
+        WHERE user_id = %s AND date = %s
     """, (user_id, today_str))
     result = cursor.fetchone()
     commentaire_global = result["texte"] if result else ""
@@ -162,12 +162,13 @@ async def add_saisie(request: Request, activity_id: int = Form(...), heure_debut
 
     today = date.today().isoformat()
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
 
     # Vérification du chevauchement
     cursor.execute("""
         SELECT heure_debut, heure_fin FROM durees
-        WHERE user_id = ? AND date = ?
+        WHERE user_id = %s AND date = %s
     """, (user_id, today))
     existing = cursor.fetchall()
     for row in existing:
@@ -180,7 +181,7 @@ async def add_saisie(request: Request, activity_id: int = Form(...), heure_debut
     # Insertion
     cursor.execute("""
         INSERT INTO durees (user_id, activity_id, date, heure_debut, heure_fin)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
     """, (user_id, activity_id, today, heure_debut, heure_fin))
     conn.commit()
     conn.close()
@@ -198,12 +199,13 @@ async def ajouter_commentaire(request: Request, commentaire: str = Form(...)):
 
     today = date.today().isoformat()
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
 
     # On vérifie s'il existe déjà un commentaire
     cursor.execute("""
         SELECT id FROM commentaire_journalier
-        WHERE user_id = ? AND date = ?
+        WHERE user_id = %s AND date = %s
     """, (user_id, today))
     existing = cursor.fetchone()
 
@@ -211,14 +213,14 @@ async def ajouter_commentaire(request: Request, commentaire: str = Form(...)):
         # Mise à jour si déjà existant
         cursor.execute("""
             UPDATE commentaire_journalier
-            SET texte = ?
-            WHERE user_id = ? AND date = ?
+            SET texte = %s
+            WHERE user_id = %s AND date = %s
         """, (commentaire, user_id, today))
     else:
         # Insertion sinon
         cursor.execute("""
             INSERT INTO commentaire_journalier (user_id, date, texte)
-            VALUES (?, ?, ?)
+            VALUES (%s, %s, %s)
         """, (user_id, today, commentaire))
 
     conn.commit()
@@ -231,10 +233,11 @@ async def ajouter_commentaire(request: Request, commentaire: str = Form(...)):
 @app.post("/saisie/delete-last")
 async def delete_last_saisie():
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
     cursor.execute("""
         DELETE FROM durees
-        WHERE id = (SELECT id FROM durees WHERE user_id = ? AND date = date('now') ORDER BY id DESC LIMIT 1)
+        WHERE id = (SELECT id FROM durees WHERE user_id = %s AND date = CURRENT_DATE ORDER BY id DESC LIMIT 1)
     """, (1,))  # Remplacez "1" par l'ID utilisateur réel
     conn.commit()
     conn.close()
@@ -265,8 +268,9 @@ async def delete_selected_saisie(request: Request):
     
     # Suppression dans la base de données
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM durees WHERE id = ?", (saisie_id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    cursor.execute("DELETE FROM durees WHERE id = %s", (saisie_id,))
     
     # Vérifier si une ligne a été supprimée
     if cursor.rowcount == 0:
@@ -281,7 +285,8 @@ async def delete_selected_saisie(request: Request):
 @app.get("/admin/activities", response_class=HTMLResponse)
 async def admin_activities(request: Request):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
     cursor.execute("SELECT id, name FROM activities ORDER BY name")
     activities = cursor.fetchall()
     conn.close()
@@ -290,12 +295,12 @@ async def admin_activities(request: Request):
 @app.post("/admin/activities/add")
 async def add_activity(name: str = Form(...)):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
     try:
-        cursor.execute("INSERT INTO activities (name) VALUES (?)", (name,))
+        cursor.execute("INSERT INTO activities (name) VALUES (%s)", (name,))
         conn.commit()
-    except sqlite3.IntegrityError:
-        # Cas où l'activité existe déjà
+    except psycopg2.IntegrityError:
         pass
     conn.close()
     return RedirectResponse("/admin/activities", status_code=303)
@@ -303,8 +308,9 @@ async def add_activity(name: str = Form(...)):
 @app.get("/admin/activities/delete/{activity_id}")
 async def delete_activity(activity_id: int):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM activities WHERE id = ?", (activity_id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    cursor.execute("DELETE FROM activities WHERE id = %s", (activity_id,))
     conn.commit()
     conn.close()
     return RedirectResponse("/admin/activities", status_code=303)
@@ -313,15 +319,15 @@ from fastapi.responses import FileResponse
 @app.get("/saisie/export")
 async def export_excel():
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     cursor.execute("""
         SELECT d.date, a.name AS Activité, d.heure_debut AS Début, d.heure_fin AS Fin,
-               ROUND((julianday('2000-01-01 ' || d.heure_fin) - julianday('2000-01-01 ' || d.heure_debut)) * 24, 2) AS Durée,
+               ROUND((EXTRACT(EPOCH FROM (heure_fin::time - heure_debut::time))) * 24, 2) AS Durée,
                d.commentaire AS Commentaire
         FROM durees d
         JOIN activities a ON a.id = d.activity_id
-        WHERE d.date = date('now') AND user_id = ?
+        WHERE d.date = CURRENT_DATE AND user_id = %s
         ORDER BY d.heure_debut
     """, (1,))
     rows = cursor.fetchall()
@@ -341,10 +347,11 @@ async def add_user(
     role: str = Form(...)
 ):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
     
     try:
-        cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (username, password, role))
+        cursor.execute("INSERT INTO users (username, password, role) VALUES (%s, %s, %s)", (username, password, role))
         conn.commit()
     except sqlite3.IntegrityError:
         # Option : gérer les doublons ici si souhaité
@@ -361,9 +368,10 @@ async def edit_user(
     role: str = Form(...)
 ):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
     cursor.execute("""
-        UPDATE users SET username=?, password=?, role=? WHERE id=?
+        UPDATE users SET username=%s, password=%s, role=%s WHERE id=%s
     """, (username, password, role, user_id))
     conn.commit()
     conn.close()
@@ -373,8 +381,9 @@ async def edit_user(
 @app.get("/admin/users/edit/{user_id}", response_class=HTMLResponse)
 async def edit_user_form(request: Request, user_id: int):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE id=?", (user_id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    cursor.execute("SELECT * FROM users WHERE id=%s", (user_id,))
     user = cursor.fetchone()
     conn.close()
 
@@ -385,16 +394,18 @@ async def edit_user_form(request: Request, user_id: int):
 @app.get("/admin/users/delete/{user_id}")
 async def delete_user(user_id: int):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM users WHERE id=?", (user_id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    cursor.execute("DELETE FROM users WHERE id=%s", (user_id,))
     conn.commit()
     conn.close()
     return RedirectResponse("/admin/users", status_code=303)
 
 @app.post("/admin/exports/monthly")
 async def export_monthly_summary(request: Request, month: int = Form(...), year: int = Form(...)):
-    db_path = DB_PATH  # utilisez votre variable existante
-    df = get_monthly_summary_dataframe(db_path, month, year)
+    conn = get_db_connection()
+    df = get_monthly_summary_dataframe(conn, month, year)
+    conn.close()
 
     if df.empty:
         return templates.TemplateResponse("admin_export.html", {
@@ -417,7 +428,9 @@ async def export_monthly_summary(request: Request, month: int = Form(...), year:
 
 @app.post("/admin/exports/users/excel")
 async def export_user_summary_excel(month: int = Form(...), year: int = Form(...)):
-    df = get_user_activity_summary_dataframe(DB_PATH, year, month)
+    conn = get_db_connection()
+    df = get_user_activity_summary_dataframe(conn, year, month)
+    conn.close()
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         sheet_name = f"{year}_{month:02d}"
         export_to_excel(df, tmp.name, sheet_name=sheet_name)
@@ -428,15 +441,18 @@ async def export_user_summary_excel(month: int = Form(...), year: int = Form(...
         )
 
 
+
 @app.post("/admin/exports/users")
 async def export_user_summary(request: Request, month: int = Form(...), year: int = Form(...)):
-    df = get_user_activity_summary_dataframe(DB_PATH, year, month)
+    conn = get_db_connection()
+    df = get_user_activity_summary_dataframe(conn, year, month)
+    conn.close()
 
     # Extraire la liste des activités pour l'en-tête du tableau
     activities = list(df.columns)
-    activities.remove("Utilisateur") if "Utilisateur" in activities else None
+    if "Utilisateur" in activities:
+        activities.remove("Utilisateur")
 
-    # Convertir les données du DataFrame en dictionnaires (une ligne = un utilisateur)
     user_summary = df.to_dict(orient="records")
 
     return templates.TemplateResponse("admin_export.html", {
@@ -446,6 +462,7 @@ async def export_user_summary(request: Request, month: int = Form(...), year: in
         "selected_month": month,
         "selected_year": year
     })
+
 
 
 @app.get("/admin/exports", response_class=HTMLResponse)
@@ -460,27 +477,31 @@ async def admin_exports(request: Request):
     
 @app.post("/admin/exports/users/download")
 async def export_user_summary(request: Request, year: int = Form(...), month: int = Form(...)):
-    # Génération du DataFrame
-    df = get_user_activity_summary_dataframe(DB_PATH, year, month)
+    conn = get_db_connection()
+    df = get_user_activity_summary_dataframe(conn, year, month)
+    conn.close()
 
-    # Création d’un fichier temporaire pour l’export Excel
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         sheet_name = f"{year}_{month:02d}"
         export_to_excel(df, tmp.name, sheet_name=sheet_name)
         tmp_path = tmp.name
 
-    # Envoi du fichier au client
     filename = f"recap_collaborateurs_{year}_{month:02d}.xlsx"
     return FileResponse(tmp_path, filename=filename, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
 
 
 @app.get("/admin/journee", response_class=HTMLResponse)
 async def get_admin_journee(request: Request):
     today = date.today()
-    conn = sqlite3.connect(DB_PATH)
-    utilisateurs = conn.execute("SELECT id, username FROM users ORDER BY username").fetchall()
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    cursor.execute("SELECT id, username FROM users ORDER BY username")
+    utilisateurs = cursor.fetchall()
+
+    cursor.close()
     conn.close()
+
     return templates.TemplateResponse("admin_journee.html", {
         "request": request,
         "selected_jour": today.day,
@@ -493,7 +514,8 @@ async def get_admin_journee(request: Request):
     })
 
 
-@app.post("/admin/journee", response_class=HTMLResponse)
+
+@@app.post("/admin/journee", response_class=HTMLResponse)
 async def admin_journee_post(
     request: Request,
     jour: int = Form(...),
@@ -501,8 +523,8 @@ async def admin_journee_post(
     annee: int = Form(...),
     user_id: int = Form(...)
 ):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     date_str = f"{annee:04d}-{mois:02d}-{jour:02d}"  # format 'YYYY-MM-DD'
 
@@ -511,7 +533,7 @@ async def admin_journee_post(
         SELECT a.name, d.heure_debut, d.heure_fin
         FROM durees d
         JOIN activities a ON d.activity_id = a.id
-        WHERE d.user_id = ? AND d.date = ?
+        WHERE d.user_id = %s AND d.date = %s
         ORDER BY d.heure_debut ASC
     """, (user_id, date_str))
     enregistrements = cursor.fetchall()
@@ -519,16 +541,16 @@ async def admin_journee_post(
     # Récupérer le commentaire journalier (s'il existe)
     cursor.execute("""
         SELECT texte FROM commentaire_journalier
-        WHERE user_id = ? AND date = ?
+        WHERE user_id = %s AND date = %s
     """, (user_id, date_str))
     commentaire = cursor.fetchone()
-    commentaire = commentaire[0] if commentaire else ""
+    commentaire = commentaire["texte"] if commentaire else ""
 
-    # Récupérer la liste des utilisateurs (pour afficher à nouveau le menu déroulant)
-    cursor.execute("SELECT id, username FROM users")
+    # Récupérer la liste des utilisateurs
+    cursor.execute("SELECT id, username FROM users ORDER BY username")
     utilisateurs = cursor.fetchall()
 
-    # Fermer la connexion
+    cursor.close()
     conn.close()
 
     return templates.TemplateResponse("admin_journee.html", {
@@ -542,31 +564,15 @@ async def admin_journee_post(
         "utilisateurs": utilisateurs
     })
 
-@app.get("/admin/journee", response_class=HTMLResponse)
-async def get_admin_journee(request: Request):
-    today = date.today()
-    conn = sqlite3.connect(DB_PATH)
-    utilisateurs = conn.execute("SELECT id, identifiant FROM users").fetchall()
-    conn.close()
-    return templates.TemplateResponse("admin_journee.html", {
-        "request": request,
-        "selected_jour": today.day,
-        "selected_mois": today.month,
-        "selected_annee": today.year,
-        "utilisateurs": utilisateurs,
-        "selected_user_id": None,
-        "enregistrements": None,
-        "commentaire": None
-    })
 
 # 🔐 Traitement de la connexion
 @app.post("/login")
 async def login(request: Request, identifiant: str = Form(...), mot_de_passe: str = Form(...)):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     # Utiliser les bons noms de colonnes de la BDD
-    cursor.execute("SELECT * FROM users WHERE username = ? AND password = ?", (identifiant, mot_de_passe))
+    cursor.execute("SELECT * FROM users WHERE username = %s AND password = %s", (identifiant, mot_de_passe))
     user = cursor.fetchone()
     conn.close()
 

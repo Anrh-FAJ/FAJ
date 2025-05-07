@@ -6,3 +6,4 @@ itsdangerous
 pandas
 openpyxl
 xlsxwriter
+psycopg2-binary
