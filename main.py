@@ -92,12 +92,11 @@ async def render_saisie_page(request: Request, error: str = None):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-
-    # ✅ Activités
+    # Activités
     cursor.execute("SELECT id, name FROM activities ORDER BY name")
     activities = cursor.fetchall()
 
-    # ✅ Récupération des saisies pour l'utilisateur et la date du jour
+    # Récupération des saisies
     cursor.execute("""
         SELECT d.id, a.name AS activity_name, d.heure_debut, d.heure_fin
         FROM durees d
@@ -107,14 +106,14 @@ async def render_saisie_page(request: Request, error: str = None):
     """, (today_str, user_id))
     rows = cursor.fetchall()
 
-    # ✅ Traitement des résultats
+    # Traitement des résultats
     saisies = []
     total_minutes = 0
     for row in rows:
         try:
-            debut = datetime.strptime(row["heure_debut"], "%H:%M")
-            fin = datetime.strptime(row["heure_fin"], "%H:%M")
-            duree = int((fin - debut).total_seconds() // 60)
+            debut_dt = datetime.combine(today, row["heure_debut"])
+            fin_dt = datetime.combine(today, row["heure_fin"])
+            duree = int((fin_dt - debut_dt).total_seconds() // 60)
             total_minutes += duree
             hhmm = f"{duree // 60:02}:{duree % 60:02}"
         except Exception:
@@ -122,14 +121,14 @@ async def render_saisie_page(request: Request, error: str = None):
         saisies.append({
             "id": row["id"],
             "activity_name": row["activity_name"],
-            "heure_debut": row["heure_debut"],
-            "heure_fin": row["heure_fin"],
+            "heure_debut": row["heure_debut"].strftime("%H:%M"),
+            "heure_fin": row["heure_fin"].strftime("%H:%M"),
             "duree": hhmm
         })
 
     total_duree = f"{total_minutes // 60:02}:{total_minutes % 60:02}"
 
-    # ✅ Commentaire global (si existe)
+    # Commentaire global
     cursor.execute("""
         SELECT texte FROM commentaire_journalier
         WHERE user_id = %s AND date = %s
@@ -138,7 +137,6 @@ async def render_saisie_page(request: Request, error: str = None):
     commentaire_global = result["texte"] if result else ""
 
     conn.close()
-    
     user_name = get_user_name(user_id)
 
     return templates.TemplateResponse("saisie.html", {
@@ -155,6 +153,7 @@ async def render_saisie_page(request: Request, error: str = None):
 
 
 
+
 @app.post("/saisie/add")
 async def add_saisie(request: Request, activity_id: int = Form(...), heure_debut: str = Form(...), heure_fin: str = Form(...)):
     user_id = request.session.get("user_id")
@@ -162,6 +161,7 @@ async def add_saisie(request: Request, activity_id: int = Form(...), heure_debut
         return RedirectResponse("/", status_code=303)
 
     try:
+        # Validation du format
         debut = datetime.strptime(heure_debut, "%H:%M")
         fin = datetime.strptime(heure_fin, "%H:%M")
         if debut >= fin:
@@ -169,10 +169,15 @@ async def add_saisie(request: Request, activity_id: int = Form(...), heure_debut
     except ValueError:
         return await render_saisie_page(request, error="⛔ Format d'heure invalide.")
 
+    # Ajout des secondes si manquantes
+    if len(heure_debut) == 5:
+        heure_debut += ":00"
+    if len(heure_fin) == 5:
+        heure_fin += ":00"
+
     today = date.today().isoformat()
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-
 
     # Vérification du chevauchement
     cursor.execute("""
@@ -181,8 +186,8 @@ async def add_saisie(request: Request, activity_id: int = Form(...), heure_debut
     """, (user_id, today))
     existing = cursor.fetchall()
     for row in existing:
-        db_debut = datetime.strptime(row["heure_debut"], "%H:%M")
-        db_fin = datetime.strptime(row["heure_fin"], "%H:%M")
+        db_debut = datetime.combine(date.today(), row["heure_debut"])
+        db_fin = datetime.combine(date.today(), row["heure_fin"])
         if not (fin <= db_debut or debut >= db_fin):
             conn.close()
             return await render_saisie_page(request, error="⛔ Chevauchement avec une autre saisie.")
@@ -196,6 +201,7 @@ async def add_saisie(request: Request, activity_id: int = Form(...), heure_debut
     conn.close()
 
     return RedirectResponse("/saisie", status_code=303)
+
 
 
 
