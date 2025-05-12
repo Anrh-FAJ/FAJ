@@ -605,8 +605,31 @@ async def login(request: Request, identifiant: str = Form(...), mot_de_passe: st
         })
 
 @app.get("/admin/modifications", response_class=HTMLResponse)
-async def admin_modifications(request: Request):
-    return templates.TemplateResponse("modif_saisie.html", {"request": request})
+async def get_admin_modifications(request: Request):
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    # Récupérer les utilisateurs
+    cursor.execute("SELECT id, username FROM users ORDER BY username")
+    utilisateurs = cursor.fetchall()
+
+    # Récupérer les activités
+    cursor.execute("SELECT id, name FROM activities ORDER BY name")
+    activities = cursor.fetchall()
+
+    conn.close()
+
+    return templates.TemplateResponse("modif_saisie.html", {
+        "request": request,
+        "utilisateurs": utilisateurs,
+        "activities": activities,
+        "saisies": [],
+        "selected_user_id": None,
+        "selected_date": None,
+        "total_duree": "00:00",
+        "error": None
+    })
+
 
 @app.post("/admin/modifications", response_class=HTMLResponse)
 async def post_admin_modifications(
