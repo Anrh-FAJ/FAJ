@@ -604,6 +604,10 @@ async def login(request: Request, identifiant: str = Form(...), mot_de_passe: st
             "error": "⛔ Identifiant ou mot de passe incorrect."
         })
 
+@app.get("/admin/modifications", response_class=HTMLResponse)
+async def admin_modifications(request: Request):
+    return templates.TemplateResponse("modif_saisie.html", {"request": request})
+
 
 
 # 👨‍💼 Page Admin
