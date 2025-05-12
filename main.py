@@ -608,6 +608,115 @@ async def login(request: Request, identifiant: str = Form(...), mot_de_passe: st
 async def admin_modifications(request: Request):
     return templates.TemplateResponse("modif_saisie.html", {"request": request})
 
+@app.post("/admin/modifications", response_class=HTMLResponse)
+async def post_admin_modifications(
+    request: Request,
+    user_id: int = Form(...),
+    date: str = Form(...)
+):
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    # Récupération des utilisateurs
+    cursor.execute("SELECT id, username FROM users ORDER BY username")
+    utilisateurs = cursor.fetchall()
+
+    # Récupération des activités
+    cursor.execute("SELECT id, name FROM activities ORDER BY name")
+    activities = cursor.fetchall()
+
+    # Récupération des saisies
+    cursor.execute("""
+        SELECT d.id, a.name AS activity_name, d.heure_debut, d.heure_fin
+        FROM durees d
+        JOIN activities a ON a.id = d.activity_id
+        WHERE d.user_id = %s AND d.date = %s
+        ORDER BY d.heure_debut
+    """, (user_id, date))
+    rows = cursor.fetchall()
+
+    # Calcul des durées
+    saisies = []
+    total_minutes = 0
+    for row in rows:
+        try:
+            debut = datetime.combine(datetime.today(), row["heure_debut"])
+            fin = datetime.combine(datetime.today(), row["heure_fin"])
+            duree = int((fin - debut).total_seconds() // 60)
+            total_minutes += duree
+            hhmm = f"{duree // 60:02}:{duree % 60:02}"
+        except Exception:
+            hhmm = "??:??"
+        saisies.append({
+            "id": row["id"],
+            "activity_name": row["activity_name"],
+            "heure_debut": row["heure_debut"].strftime("%H:%M"),
+            "heure_fin": row["heure_fin"].strftime("%H:%M"),
+            "duree": hhmm
+        })
+
+    total_duree = f"{total_minutes // 60:02}:{total_minutes % 60:02}"
+    conn.close()
+
+    return templates.TemplateResponse("modif_saisie.html", {
+        "request": request,
+        "utilisateurs": utilisateurs,
+        "activities": activities,
+        "saisies": saisies,
+        "selected_user_id": user_id,
+        "selected_date": date,
+        "total_duree": total_duree,
+        "error": None
+    })
+
+@app.post("/admin/modifications/add")
+async def admin_add_modification(
+    request: Request,
+    user_id: int = Form(...),
+    date: str = Form(...),
+    activity_id: int = Form(...),
+    heure_debut: str = Form(...),
+    heure_fin: str = Form(...)
+):
+    try:
+        debut = datetime.strptime(heure_debut, "%H:%M")
+        fin = datetime.strptime(heure_fin, "%H:%M")
+        if debut >= fin:
+            raise ValueError("⛔ L'heure de début doit être inférieure à l'heure de fin.")
+    except ValueError as e:
+        return await post_admin_modifications(request, user_id=user_id, date=date)
+
+    # PostgreSQL attend HH:MM:SS
+    if len(heure_debut) == 5:
+        heure_debut += ":00"
+    if len(heure_fin) == 5:
+        heure_fin += ":00"
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+    # Vérifier chevauchement
+    cursor.execute("""
+        SELECT heure_debut, heure_fin FROM durees
+        WHERE user_id = %s AND date = %s
+    """, (user_id, date))
+    existing = cursor.fetchall()
+    for row in existing:
+        db_debut = datetime.combine(datetime.today(), row["heure_debut"])
+        db_fin = datetime.combine(datetime.today(), row["heure_fin"])
+        if not (fin <= db_debut or debut >= db_fin):
+            conn.close()
+            return await post_admin_modifications(request, user_id=user_id, date=date)
+
+    # Insérer
+    cursor.execute("""
+        INSERT INTO durees (user_id, activity_id, date, heure_debut, heure_fin)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (user_id, activity_id, date, heure_debut, heure_fin))
+    conn.commit()
+    conn.close()
+
+    return RedirectResponse(f"/admin/modifications?user_id={user_id}&date={date}", status_code=303)
 
 
 # 👨‍💼 Page Admin
