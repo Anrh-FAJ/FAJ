@@ -746,6 +746,17 @@ async def admin_add_modification(
             date=date
         )
 
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print("💥 ERREUR dans /admin/modifications/add :", e)
+        return await post_admin_modifications(
+            request,
+            user_id=user_id,
+            date=date
+        )
+
+
 @app.post("/admin/modifications/delete")
 async def delete_modification(
     request: Request,
