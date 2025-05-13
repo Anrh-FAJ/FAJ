@@ -753,24 +753,21 @@ async def delete_modification(
     user_id: int = Form(...),
     date: str = Form(...)
 ):
-    conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute("DELETE FROM durees WHERE id = %s", (saisie_id,))
-    conn.commit()
-    conn.close()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cursor.execute("DELETE FROM durees WHERE id = %s", (saisie_id,))
+        conn.commit()
+        conn.close()
 
-    return await post_admin_modifications(request, user_id=user_id, date=date)
-
+        return await post_admin_modifications(request, user_id=user_id, date=date)
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print("💥 ERREUR dans /admin/modifications/add :", e)
-        return await post_admin_modifications(
-            request,
-            user_id=user_id,
-            date=date
-        )
+        print("💥 ERREUR dans /admin/modifications/delete :", e)
+        return await post_admin_modifications(request, user_id=user_id, date=date)
+
 
 
 
