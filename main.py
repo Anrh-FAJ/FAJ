@@ -702,44 +702,76 @@ async def admin_add_modification(
     heure_fin: str = Form(...)
 ):
     try:
+        # Vérification des heures valides
         debut = datetime.strptime(heure_debut, "%H:%M")
         fin = datetime.strptime(heure_fin, "%H:%M")
         if debut >= fin:
             raise ValueError("⛔ L'heure de début doit être inférieure à l'heure de fin.")
-    except ValueError as e:
-        return await post_admin_modifications(request, user_id=user_id, date=date)
 
-    # PostgreSQL attend HH:MM:SS
-    if len(heure_debut) == 5:
-        heure_debut += ":00"
-    if len(heure_fin) == 5:
-        heure_fin += ":00"
+        # Ajout des secondes si absentes
+        if len(heure_debut) == 5:
+            heure_debut += ":00"
+        if len(heure_fin) == 5:
+            heure_fin += ":00"
 
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+        # Vérification des chevauchements
+        cursor.execute("""
+            SELECT heure_debut, heure_fin FROM durees
+            WHERE user_id = %s AND date = %s
+        """, (user_id, date))
+        existing = cursor.fetchall()
+        for row in existing:
+            if row["heure_debut"] is None or row["heure_fin"] is None:
+                continue
+            db_debut = datetime.combine(datetime.today(), row["heure_debut"])
+            db_fin = datetime.combine(datetime.today(), row["heure_fin"])
+            if not (fin <= db_debut or debut >= db_fin):
+                conn.close()
+                raise ValueError("⛔ Chevauchement avec une autre saisie.")
+
+        # Insertion
+        cursor.execute("""
+            INSERT INTO durees (user_id, activity_id, date, heure_debut, heure_fin)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (user_id, activity_id, date, heure_debut, heure_fin))
+        conn.commit()
+        conn.close()
+
+        return await post_admin_modifications(
+            request=request,
+            user_id=user_id,
+            date=date
+        )
+
+@app.post("/admin/modifications/delete")
+async def delete_modification(
+    request: Request,
+    saisie_id: int = Form(...),
+    user_id: int = Form(...),
+    date: str = Form(...)
+):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-
-    # Vérifier chevauchement
-    cursor.execute("""
-        SELECT heure_debut, heure_fin FROM durees
-        WHERE user_id = %s AND date = %s
-    """, (user_id, date))
-    existing = cursor.fetchall()
-    for row in existing:
-        db_debut = datetime.combine(datetime.today(), row["heure_debut"])
-        db_fin = datetime.combine(datetime.today(), row["heure_fin"])
-        if not (fin <= db_debut or debut >= db_fin):
-            conn.close()
-            return await post_admin_modifications(request, user_id=user_id, date=date)
-
-    # Insérer
-    cursor.execute("""
-        INSERT INTO durees (user_id, activity_id, date, heure_debut, heure_fin)
-        VALUES (%s, %s, %s, %s, %s)
-    """, (user_id, activity_id, date, heure_debut, heure_fin))
+    cursor.execute("DELETE FROM durees WHERE id = %s", (saisie_id,))
     conn.commit()
     conn.close()
 
-    return RedirectResponse(f"/admin/modifications?user_id={user_id}&date={date}", status_code=303)
+    return await post_admin_modifications(request, user_id=user_id, date=date)
+
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print("💥 ERREUR dans /admin/modifications/add :", e)
+        return await post_admin_modifications(
+            request,
+            user_id=user_id,
+            date=date
+        )
+
 
 
 # 👨‍💼 Page Admin

@@ -83,21 +83,32 @@
             <table class="w-full text-sm border border-gray-300 rounded overflow-hidden">
                 <thead class="bg-gray-200">
                     <tr>
-                        <th class="p-2">Activité</th>
-                        <th class="p-2">Début</th>
-                        <th class="p-2">Fin</th>
-                        <th class="p-2">Durée</th>
-                    </tr>
+						<th class="p-2">Activité</th>
+						<th class="p-2">Début</th>
+						<th class="p-2">Fin</th>
+						<th class="p-2">Durée</th>
+						<th class="p-2 text-right">Actions</th>
+					</tr>
+
                 </thead>
                 <tbody>
                     {% for s in saisies %}
-                    <tr class="border-t hover:bg-gray-50">
-                        <td class="p-2">{{ s.activity_name }}</td>
-                        <td class="p-2">{{ s.heure_debut }}</td>
-                        <td class="p-2">{{ s.heure_fin }}</td>
-                        <td class="p-2">{{ s.duree }}</td>
-                    </tr>
-                    {% endfor %}
+					<tr class="border-t hover:bg-gray-50">
+						<td class="p-2">{{ s.activity_name }}</td>
+						<td class="p-2">{{ s.heure_debut }}</td>
+						<td class="p-2">{{ s.heure_fin }}</td>
+						<td class="p-2">{{ s.duree }}</td>
+						<td class="p-2 text-right">
+							<form method="post" action="/admin/modifications/delete" onsubmit="return confirm('Supprimer cette saisie ?')">
+								<input type="hidden" name="saisie_id" value="{{ s.id }}">
+								<input type="hidden" name="user_id" value="{{ selected_user_id }}">
+								<input type="hidden" name="date" value="{{ selected_date }}">
+								<button type="submit" class="text-red-600 hover:text-red-800 font-bold">🗑️</button>
+							</form>
+						</td>
+					</tr>
+					{% endfor %}
+
                 </tbody>
             </table>
             <div class="mt-4 text-sm text-gray-700 text-right">
