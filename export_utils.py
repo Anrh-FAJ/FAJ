@@ -3,37 +3,46 @@ import psycopg2.extras
 from datetime import datetime
 
 def get_monthly_summary_dataframe(conn, month, year):
+    import pandas as pd
+
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
+    # Étape 1 – On extrait proprement toutes les durées valides
     query = """
-        SELECT a.name AS activité, 
-               SUM(EXTRACT(EPOCH FROM (d.heure_fin - d.heure_debut)) / 60) AS total_minutes
+        SELECT u.id AS user_id, a.name AS activité,
+               EXTRACT(EPOCH FROM (d.heure_fin - d.heure_debut)) / 60 AS minutes
         FROM durees d
         JOIN activities a ON d.activity_id = a.id
+        JOIN users u ON d.user_id = u.id
         WHERE 
             EXTRACT(MONTH FROM d.date) = %s 
             AND EXTRACT(YEAR FROM d.date) = %s
             AND d.heure_debut IS NOT NULL 
             AND d.heure_fin IS NOT NULL
-        GROUP BY a.name
-        ORDER BY a.name;
     """
 
     cursor.execute(query, (month, year))
     rows = cursor.fetchall()
     conn.close()
 
-    df = pd.DataFrame(rows, columns=["Activité", "Total (minutes)"])
+    if not rows:
+        return pd.DataFrame(columns=["Activité", "Total (minutes)", "Durée (HH:MM)"])
+
+    df = pd.DataFrame(rows)
+
+    # Étape 2 – On groupe par activité uniquement (somme des utilisateurs)
+    df_grouped = df.groupby("activité")["minutes"].sum().reset_index()
 
     def minutes_to_hhmm(mins):
         heures = int(mins) // 60
         minutes = int(mins) % 60
         return f"{heures:02d}:{minutes:02d}"
 
-    if not df.empty:
-        df["Durée (HH:MM)"] = df["Total (minutes)"].apply(minutes_to_hhmm)
+    df_grouped["Durée (HH:MM)"] = df_grouped["minutes"].apply(minutes_to_hhmm)
+    df_grouped.rename(columns={"minutes": "Total (minutes)"}, inplace=True)
 
-    return df
+    return df_grouped[["activité", "Total (minutes)", "Durée (HH:MM)"]]
+
 
 
 
