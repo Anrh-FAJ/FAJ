@@ -10,7 +10,11 @@ def get_monthly_summary_dataframe(conn, month, year):
                SUM(EXTRACT(EPOCH FROM (d.heure_fin - d.heure_debut)) / 60) AS total_minutes
         FROM durees d
         JOIN activities a ON d.activity_id = a.id
-        WHERE EXTRACT(MONTH FROM d.date) = %s AND EXTRACT(YEAR FROM d.date) = %s
+        WHERE 
+            EXTRACT(MONTH FROM d.date) = %s 
+            AND EXTRACT(YEAR FROM d.date) = %s
+            AND d.heure_debut IS NOT NULL 
+            AND d.heure_fin IS NOT NULL
         GROUP BY a.name
         ORDER BY a.name;
     """
@@ -30,6 +34,7 @@ def get_monthly_summary_dataframe(conn, month, year):
         df["Durée (HH:MM)"] = df["Total (minutes)"].apply(minutes_to_hhmm)
 
     return df
+
 
 
 def export_to_excel(df, path, sheet_name="Feuille1"):
