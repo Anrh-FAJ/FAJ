@@ -7,7 +7,6 @@ def get_monthly_summary_dataframe(conn, month, year):
 
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-    # Étape 1 – On extrait proprement toutes les durées valides
     query = """
         SELECT u.id AS user_id, a.name AS activité,
                EXTRACT(EPOCH FROM (d.heure_fin - d.heure_debut)) / 60 AS minutes
@@ -28,9 +27,8 @@ def get_monthly_summary_dataframe(conn, month, year):
     if not rows:
         return pd.DataFrame(columns=["Activité", "Total (minutes)", "Durée (HH:MM)"])
 
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(rows, columns=["user_id", "activité", "minutes"])
 
-    # Étape 2 – On groupe par activité uniquement (somme des utilisateurs)
     df_grouped = df.groupby("activité")["minutes"].sum().reset_index()
 
     def minutes_to_hhmm(mins):
@@ -42,6 +40,7 @@ def get_monthly_summary_dataframe(conn, month, year):
     df_grouped.rename(columns={"minutes": "Total (minutes)"}, inplace=True)
 
     return df_grouped[["activité", "Total (minutes)", "Durée (HH:MM)"]]
+
 
 
 
