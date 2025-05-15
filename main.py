@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.responses import FileResponse
-from export_utils import get_monthly_summary_dataframe, export_to_excel
+from export_utils import get_monthly_summary_dataframe, get_user_activity_summary_dataframe, export_to_excel
 import tempfile
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
