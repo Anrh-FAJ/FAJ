@@ -1,93 +1,81 @@
 import pandas as pd
 import psycopg2.extras
 from datetime import datetime
+from calendar import monthrange
 
-def get_monthly_summary_dataframe(conn, month, year):
-    import pandas as pd
-
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-
-    query = """
-        SELECT u.id AS user_id, a.name AS activité,
-               EXTRACT(EPOCH FROM (d.heure_fin - d.heure_debut)) / 60 AS minutes
-        FROM durees d
-        JOIN activities a ON d.activity_id = a.id
-        JOIN users u ON d.user_id = u.id
-        WHERE 
-            EXTRACT(MONTH FROM d.date) = %s 
-            AND EXTRACT(YEAR FROM d.date) = %s
-            AND d.heure_debut IS NOT NULL 
-            AND d.heure_fin IS NOT NULL
+# --------- 1) Récap global ---------------------------
+def get_monthly_summary_dataframe(conn, month: int, year: int) -> pd.DataFrame:
     """
+    Retourne un DataFrame : activité | minutes | HH:MM
+    On laisse le CALLER fermer le 'conn'.
+    """
+    sql = """
+        SELECT a.name AS activité,
+               EXTRACT(EPOCH FROM (d.heure_fin - d.heure_debut))/60 AS minutes
+        FROM durees d
+        JOIN activities a ON a.id = d.activity_id
+        WHERE d.heure_debut IS NOT NULL
+          AND d.heure_fin   IS NOT NULL
+          AND EXTRACT(MONTH FROM d.date) = %s
+          AND EXTRACT(YEAR  FROM d.date) = %s
+    """
+    df = pd.read_sql(sql, conn, params=(month, year))
 
-    cursor.execute(query, (month, year))
-    rows = cursor.fetchall()
-    conn.close()
+    if df.empty:
+        return pd.DataFrame(columns=["Activité", "Minutes", "HH:MM"])
 
-    if not rows:
-        return pd.DataFrame(columns=["Activité", "Total (minutes)", "Durée (HH:MM)"])
-
-    df = pd.DataFrame(rows, columns=["user_id", "activité", "minutes"])
-
-    df_grouped = df.groupby("activité")["minutes"].sum().reset_index()
-
-    def minutes_to_hhmm(mins):
-        heures = int(mins) // 60
-        minutes = int(mins) % 60
-        return f"{heures:02d}:{minutes:02d}"
-
-    df_grouped["Durée (HH:MM)"] = df_grouped["minutes"].apply(minutes_to_hhmm)
-    df_grouped.rename(columns={"minutes": "Total (minutes)"}, inplace=True)
-
-    return df_grouped[["activité", "Total (minutes)", "Durée (HH:MM)"]]
+    total = (
+        df.groupby("activité", as_index=False)["minutes"]
+        .sum()
+        .assign(**{
+            "HH:MM": lambda x: x["minutes"].apply(
+                lambda m: f"{int(m)//60:02d}:{int(m)%60:02d}")
+        })
+    )
+    total = total.rename(columns={"minutes": "Minutes", "activité": "Activité"})
+    return total[["Activité", "Minutes", "HH:MM"]]
 
 
-
-
-
-def export_to_excel(df, path, sheet_name="Feuille1"):
-    # Supprime la colonne des minutes si elle existe
-    if "Total (minutes)" in df.columns:
-        df = df.drop(columns=["Total (minutes)"])
-
-    # Exporte vers Excel avec nom de feuille personnalisé
-    with pd.ExcelWriter(path, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name=sheet_name)
-
-def get_user_activity_summary_dataframe(conn, year: int, month: int):
-    import pandas as pd
-    from calendar import monthrange
-
+# --------- 2) Récap par utilisateur ------------------
+def get_user_activity_summary_dataframe(conn, year: int, month: int) -> pd.DataFrame:
+    """
+    Retourne un pivot prêt à afficher :
+    index = Utilisateur, colonnes = Activité, valeurs = HH:MM
+    """
     date_debut = f"{year}-{month:02d}-01"
-    date_fin = f"{year}-{month:02d}-{monthrange(year, month)[1]}"
+    date_fin   = f"{year}-{month:02d}-{monthrange(year, month)[1]}"
 
-    query = """
-        SELECT u.username AS utilisateur,
-               a.name AS activité,
-               EXTRACT(EPOCH FROM (d.heure_fin - d.heure_debut)) / 60 AS minutes
+    sql = """
+        SELECT u.username  AS utilisateur,
+               a.name      AS activité,
+               EXTRACT(EPOCH FROM (d.heure_fin - d.heure_debut))/60 AS minutes
         FROM durees d
-        JOIN users u ON d.user_id = u.id
-        JOIN activities a ON d.activity_id = a.id
-        WHERE d.date BETWEEN %s AND %s
-          AND d.heure_debut IS NOT NULL
-          AND d.heure_fin IS NOT NULL
+        JOIN users      u ON u.id = d.user_id
+        JOIN activities a ON a.id = d.activity_id
+        WHERE d.heure_debut IS NOT NULL
+          AND d.heure_fin   IS NOT NULL
+          AND d.date BETWEEN %s AND %s
     """
-
-    cursor = conn.cursor()
-    cursor.execute(query, (date_debut, date_fin))
-    rows = cursor.fetchall()
-
-    df = pd.DataFrame(rows, columns=["Utilisateur", "Activité", "Minutes"])
+    df = pd.read_sql(sql, conn, params=(date_debut, date_fin))
 
     if df.empty:
         return pd.DataFrame()
 
-    df_agg = df.groupby(['Utilisateur', 'Activité'])['Minutes'].sum().reset_index()
+    # agrégation propre : un utilisateur peut avoir plusieurs lignes pour une activité
+    df = (
+        df.groupby(["utilisateur", "activité"], as_index=False)["minutes"]
+        .sum()
+        .assign(**{
+            "HH:MM": lambda x: x["minutes"].apply(
+                lambda m: f"{int(m)//60:02d}:{int(m)%60:02d}")
+        })
+    )
 
-    df_agg['Heures'] = df_agg['Minutes'].apply(lambda m: f"{int(m)//60:02d}:{int(m)%60:02d}")
-    df_agg.drop(columns=['Minutes'], inplace=True)
+    pivot = (
+        df.pivot(index="utilisateur", columns="activité", values="HH:MM")
+        .fillna("00:00")
+        .reset_index()
+        .rename(columns={"utilisateur": "Utilisateur"})
+    )
 
-    pivot_df = df_agg.pivot(index="Utilisateur", columns="Activité", values="Heures").fillna("00:00").reset_index()
-
-    return pivot_df
-
+    return pivot
