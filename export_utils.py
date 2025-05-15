@@ -2,6 +2,7 @@ import pandas as pd
 import psycopg2.extras
 from datetime import datetime
 from calendar import monthrange
+import xlsxwriter   # déjà tiré automatiquement par pandas
 
 # --------- 1) Récap global ---------------------------
 def get_monthly_summary_dataframe(conn, month: int, year: int) -> pd.DataFrame:
@@ -79,3 +80,15 @@ def get_user_activity_summary_dataframe(conn, year: int, month: int) -> pd.DataF
     )
 
     return pivot
+
+def export_to_excel(df: pd.DataFrame, path: str, *, sheet_name: str = "Feuille1") -> None:
+    """
+    Exporte le DataFrame vers un fichier Excel.
+    - Supprime la colonne 'Minutes' brute si elle existe.
+    - Crée le classeur avec xlsxwriter.
+    """
+    if "Minutes" in df.columns:
+        df = df.drop(columns=["Minutes"])
+
+    with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
