@@ -43,17 +43,16 @@ def get_monthly_summary_dataframe(conn, month: int, year: int) -> pd.DataFrame:
 # ──────────────────────────────────────────────────────────
 # 2) RÉCAPITULATIF MENSUEL PAR COLLABORATEUR
 # ──────────────────────────────────────────────────────────
-def get_user_activity_summary_dataframe(conn, year: int, month: int) -> pd.DataFrame:
-    """
-    Tableau croisé : lignes = utilisateurs, colonnes = activités, valeur = HH:MM
-    """
+def get_user_activity_summary_dataframe(conn: psycopg2.extensions.connection,
+                                        year: int, month: int) -> pd.DataFrame:
+    from calendar import monthrange
     date_debut = f"{year}-{month:02d}-01"
     date_fin   = f"{year}-{month:02d}-{monthrange(year, month)[1]}"
 
     query = """
-        SELECT u.username AS Utilisateur,
-               a.name      AS Activité,
-               CAST(EXTRACT(EPOCH FROM (d.heure_fin - d.heure_debut)) / 60 AS INTEGER) AS Minutes
+        SELECT u.username AS utilisateur,          -- ⚠ identifiants en minuscules
+               a.name      AS activite,
+               CAST(EXTRACT(EPOCH FROM (d.heure_fin - d.heure_debut)) / 60 AS INTEGER) AS minutes
         FROM   durees d
         JOIN   users      u ON u.id = d.user_id
         JOIN   activities a ON a.id = d.activity_id
@@ -66,26 +65,25 @@ def get_user_activity_summary_dataframe(conn, year: int, month: int) -> pd.DataF
     if df.empty:
         return pd.DataFrame()
 
-    # agrégation au cas où il y aurait plusieurs lignes (même user / activité)
+    # ── Agrégation exacte minutes par (utilisateur, activité)
     df_agg = (
-        df.groupby(["Utilisateur", "Activité"])["Minutes"]
-        .sum()
-        .reset_index()
+        df.groupby(["utilisateur", "activite"])["minutes"]
+          .sum()
+          .reset_index()
     )
-    df_agg["Heures"] = df_agg["Minutes"].apply(_mins_to_hhmm)
+    df_agg["heures"] = df_agg["minutes"].apply(_mins_to_hhmm)
 
     pivot_df = (
-        df_agg.pivot_table(
-            index="Utilisateur",
-            columns="Activité",
-            values="Heures",
-            aggfunc="first",
-            fill_value="00:00",
-        )
-        .reset_index()
-        .sort_values("Utilisateur")
+        df_agg.pivot_table(index="utilisateur",
+                           columns="activite",
+                           values="heures",
+                           aggfunc="first",
+                           fill_value="00:00")
+              .reset_index()
+              .sort_values("utilisateur")
     )
     return pivot_df
+
 
 
 # ──────────────────────────────────────────────────────────
