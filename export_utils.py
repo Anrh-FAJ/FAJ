@@ -80,9 +80,11 @@ def get_user_activity_summary_dataframe(conn: psycopg2.extensions.connection,
                            aggfunc="first",
                            fill_value="00:00")
               .reset_index()
-              .sort_values("utilisateur")
+              .rename(columns={"utilisateur": "Utilisateur"})  # ✅ ici
+              .sort_values("Utilisateur")
     )
     return pivot_df
+
 
 
 
